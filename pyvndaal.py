@@ -1,6 +1,6 @@
 import socket
 import ssl
-from sys import exit
+import sys
 import json
 
 class VNDAAL:
@@ -9,7 +9,7 @@ class VNDAAL:
 	BUFFER_SIZE = 4096
 	TIMEOUT = 15
 	HOSTNAME = "api.vndb.org"
-	LOGIN_MESSAGE = 'login {"protocol":1,"client":"wwmonktest","clientver":0.1}\u0004'
+	LOGIN_MESSAGE = 'login {"protocol":1,"client":"pyvndaal_by_WhirlwindMonk","clientver":0.1}\u0004'
 
 	def open_connection(self):
 		context = ssl.create_default_context()
@@ -28,6 +28,7 @@ class VNDAAL:
 		self.SSL_SOCK.send(self.LOGIN_MESSAGE.encode())
 		data1 = self.SSL_SOCK.recv(self.BUFFER_SIZE)
 		if data1 != b'ok\x04':
+			print(data1)
 			return "ERROR: LOGIN FAILED"
 		return "LOGIN: SUCCESS"
 	
@@ -40,7 +41,7 @@ class VNDAAL:
 			try:
 				response += data.decode()
 			except UnicodeDecodeError:
-				print("OS error: {0}".format(err))
+				print("OS error:", sys.exc_info()[0])
 				self.close_connection()
 				return
 			except:
@@ -52,20 +53,41 @@ class VNDAAL:
 			if '\u0004' in response:
 				break
 		if "error" in response:
-			return "ERROR: QUERY INVALID"
+			print(response)
+			return "ERROR00: QUERY INVALID"
 		response = response[8:-1]
 		return json.loads(response)
 	
 	def get_vn_by_id(self, id):
-		query = 'get vn basic,details,anime,relations,tags,stats,screens (id = ' + id + ')'
+		query = 'get vn basic,details,anime,relations,tags,stats,screens (id = ' + str(id) + ')'
 		response = self._query(query)
-		return VN(response)
+		if "ERROR00" in response:
+			return response
+		elif response['num'] == 0:
+			return "ERROR: NO RESULTS FOUND"
+		return VN(response['items'][0])
 	
 	def get_vn_by_name(self, name):
 		query = 'get vn basic,details,anime,relations,tags,stats,screens (search ~ "' + name + '")'
 		response = self._query(query)
+		if "ERROR00" in response:
+			return response
+		elif response['num'] == 0:
+			return "ERROR: NO RESULTS FOUND"
 		# print(response)
-		return VN(response)
+		return VN(response['items'][0])
+		
+	def get_vns_by_name(self, name):
+		vn_list = []
+		query = 'get vn basic,details,anime,relations,tags,stats,screens (search ~ "' + name + '")'
+		response = self._query(query)
+		if "ERROR00" in response:
+			return response
+		elif response['num'] == 0:
+			return "ERROR: NO RESULTS FOUND"
+		for item in response['items']:
+			vn_list.append(VN(item))
+		return vn_list
 	
 	def close_connection(self):
 		self.SSL_SOCK.close()
@@ -74,4 +96,7 @@ class VN:
 	data = {}
 	
 	def __init__(self, response):
-		self.data = dict(zip(response['items'][0].keys(), response['items'][0].values()))
+		self.data = dict(zip(response.keys(), response.values()))
+		
+	def get_vndb_link(self):
+		return "https://vndb.org/v" + str(self.data['id'])
